@@ -6,7 +6,6 @@
  */
 package thomasbotsford3draycastingengine;
     
-
 /**
  *
  * @author tom
