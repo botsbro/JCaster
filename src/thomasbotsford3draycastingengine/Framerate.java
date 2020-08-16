@@ -12,10 +12,10 @@ package thomasbotsford3draycastingengine;
 public class Framerate {
 
     public static int fps;
-    public static double time;
+
     
     private static long frameStartTime = System.nanoTime(); //exact time when frame starts
-    private static long frameLastTime = System.nanoTime();
+
     private static int framesCount; //number of frames counted per second, incremented each update 
     
     
@@ -29,8 +29,8 @@ public class Framerate {
         else {
             framesCount++; //increment frame count if a second has not passed
         }
-        time = currentFrameTime - frameLastTime;
-        frameLastTime = currentFrameTime;
+
+
     }
     
 }

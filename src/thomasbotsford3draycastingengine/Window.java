@@ -10,45 +10,35 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseMotionAdapter;  
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
-import java.awt.event.MouseListener;
-import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
 
 
 /**
  *
  * @author tom
  */
-public class Window extends javax.swing.JFrame {
+public class Window extends javax.swing.JFrame { 
     
     private BufferedImage backBuffer; //back buffer that each following frame will be drawn to
     private BufferedImage map; //map PNG that will be used for the wall positions
-    private BufferedImage plant; //sprite for test world object
+    private BufferedImage plant; //sprite for plant world object
+    private BufferedImage tree; //sprite for tree world object
     private BufferedImage floor; //image for bottom half of background
     private BufferedImage sky; //image for top half of background
     private BufferedImage wallTexture; //image that is split into columns used for wall slices
         
     public BufferedImage[] sliceTextures = new BufferedImage[16]; //array for columns used for wall slices
-    public ArrayList<WorldObject> worldObjects = new ArrayList<>();
+    public ArrayList<WorldObject> worldObjects = new ArrayList<>(); //arrayList for worldObjects that have been drawn on a single frame, 
         
     private Point.Double cameraCoordinates = new Point.Double(50, 240); //camera starting coordinates
     private double cameraAngle = Math.toRadians(180); //starting camera direction
@@ -56,13 +46,14 @@ public class Window extends javax.swing.JFrame {
     
     //note that an image will be drawn on a projection plane between the camera and and object...
     //...this drawing is used as the 3D image output
-    private int projectionPlaneWidth = 480; //width of 3D projection output
-    private int projectionPlaneHeight = 685;
+    private int projectionPlaneWidth = 480; //width of 3D projection output, is ultimately doubled
+    private int projectionPlaneHeight = 685; //height of 3D projection output
     private double projectionPlaneDistance; // distance between camera and projection plane
-    private int black;
-    private int white;
-    private int red;
-    private int blue;
+    private final int black;
+    private final int white;
+    private final int red;
+    private final int blue;
+    private final int pink;
     
     private int sliceIndex = 0;
     private int objectIndex = 0;
@@ -70,31 +61,37 @@ public class Window extends javax.swing.JFrame {
     //final JFileChooser fc = new JFileChooser();
     
     //width of wall slices in pixels, higher gives more jagged edges on walls but better performance
-    private int sliceWidth = 6; // 1 is minimum, 2 gives best balance, recommended no higher than 6
+    private int sliceWidth = 5; // 1 is minimum, 2 gives best balance, recommended no higher than 6
 
     /**
      * Creates new form Window
      */
-    public Window() {
+    public Window() { //initalising the window
         initComponents();
         setTitle("3D Raycasting Demo (April 2020)");
-        addKeyListener(new KeyHandler());
-        addMouseListener(new MouseHandler());
-        addMouseMotionListener(new MouseMovementHandler());
-        setLocationRelativeTo(null);
+        addKeyListener(new KeyHandler()); //create keyListener called KeyHandler
+        addMouseListener(new MouseHandler()); //create MouseListener called MouseHandler
+        addMouseMotionListener(new MouseMovementHandler()); //create MouseMotionListener called MouseMovementHandler
+        setLocationRelativeTo(null); 
    
         // create back buffer to create proper frame transitions
         backBuffer = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
         
-        // load map image
+        // load graphic images
         try {
-            map = ImageIO.read(getClass().getResourceAsStream("map5.png"));
+            map = ImageIO.read(getClass().getResourceAsStream("map6.png"));
         } 
         catch (IOException ex) {
             Logger.getLogger(Window.class.getName()).log(Level.SEVERE, null, ex);
         }
         try {
             plant = ImageIO.read(getClass().getResourceAsStream("plant.png"));
+        } 
+        catch (IOException ex) {
+            Logger.getLogger(Window.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        try {
+            tree = ImageIO.read(getClass().getResourceAsStream("tree.png"));
         } 
         catch (IOException ex) {
             Logger.getLogger(Window.class.getName()).log(Level.SEVERE, null, ex);
@@ -117,34 +114,19 @@ public class Window extends javax.swing.JFrame {
         catch (IOException ex) {
             Logger.getLogger(Window.class.getName()).log(Level.SEVERE, null, ex);
         }  
-        Texture.createSliceTextures(wallTexture);
+        Texture.createSliceTextures(wallTexture); //split texture into sixteenths
 
-        createSliceTextureArray();
-        
-//        fc.showOpenDialog(this);
-//        File selFile = fc.getSelectedFile();
-//        try {
-//            wallTexture = ImageIO.read(getClass().getResourceAsStream(selFile.getCanonicalPath()));
-//        } 
-//        catch (IOException ex) {
-//            Logger.getLogger(Window.class.getName()).log(Level.SEVERE, null, ex);
-//        }  
-//       
+        createSliceTextureArray(); //put texture slices into sliceTextures array
+         
 
         //distance from projection plane scales so that perspective will remain the same in case of projection plane or FOV adjustment
         projectionPlaneDistance = (projectionPlaneWidth / 2) / Math.tan(cameraFOV / 2);  
+        //each colour has an integer value
         black = -16777216;
         white = -1;
         red = -1237980;
         blue = -16776961;
-        
-        System.out.println(cameraFOV); //fov in degrees converted to radians
-        System.out.println(Math.tan(cameraFOV / 2)); //tan using half of radians
-        System.out.println(projectionPlaneDistance);    //distance to projection plane
-        System.out.println("Black integer value = " + black);
-        System.out.println("White integer value = " + white);
-        System.out.println("Red integer value = " + red);
-        System.out.println("Blue integer value = " + blue);
+        pink = -65281;
         new Thread(new MainLoop()).start();
     }
 
@@ -227,7 +209,7 @@ public class Window extends javax.swing.JFrame {
         @Override
         public void run() {
             while (true) {
-                updateMovement();
+                updateMovement(); //call updateMovement inside of main loop
                 Thread.yield();
             }
         }
@@ -252,28 +234,6 @@ public class Window extends javax.swing.JFrame {
         sliceTextures[15] = Texture.slice16;
     }
     
-    public void cleanDupeWorldObjects(){;
-    if (worldObjects.size() == 1 || worldObjects.size() == 0){
-        
-    }
-    else{
-        WorldObject[] temp = new WorldObject[worldObjects.size()];  
-        int j = 0;  
-        for (int i=0; i<worldObjects.size()-1; i++){  
-            if (worldObjects.get(i) != worldObjects.get(i+1)){  
-                temp[j++] = worldObjects.get(i);  
-            }  
-         }  
-        temp[j++] = worldObjects.get(worldObjects.size()-1);     
-        
-        // Changing original array  
-        for (int i=0; i<j; i++){  
-            worldObjects.set(i, temp[i]);  
-            worldObjects.remove(i++);
-            System.out.println(worldObjects.size());
-        }  
-    }
-    }
     
     private double castRay(double cameraPositionX, double cameraPositionY, double cameraDirectionAngle, Graphics g, Color rayColor) { //cast a single ray
         double sin = Math.sin(cameraDirectionAngle);// sin variable for ray angle
@@ -281,7 +241,6 @@ public class Window extends javax.swing.JFrame {
         int px;
         int py;
         double wallDistance = 0; //distance of ray from camera
-        double objectDistance = 0;
         int currentColour = 0; //colour intersecting with ray
         do {
             wallDistance += 0.1; //extend ray
@@ -308,35 +267,18 @@ public class Window extends javax.swing.JFrame {
             }
             else if(currentColour == red){ //if ray hits red
                 
-//                if(worldObjects.isEmpty()){ // if no world objects
-//                    worldObjects.add(new WorldObject(px,py,plant,red,wallDistance)); //add first world object
-//                    System.out.println("Created object at " + px + "," + py + " " + "in " + "worldObjects(" + (worldObjects.size()-1) + ")");
-//                }
-//                
-//                else if (worldObjects.isEmpty() == false){ // if there is at least one viewed world object
-//                    boolean foundMatch = false;
-//                    for(int i = 0; i < worldObjects.size(); i++){        
-//
-//                        if(worldObjects.get(i).getXCoordinate() == px && worldObjects.get(i).getYCoordinate() == py){ //if coordinates of red pixel match
-//                            foundMatch = true; //found matching pixel coordinates
-//                            System.out.println("Skipped object. " + "Matched coordinates of " + "worldObjects(" + i + ")"); //do not add 
-//                            System.out.println("worldObjects size is " + worldObjects.size());
-//                        }
-//                        else{
-//                           
-//                        }
-//                    }
-//                    
-//                    if(foundMatch == false){ // if coordinates of red pixel do not match
-//                        worldObjects.add(new WorldObject(px,py,plant,red,wallDistance)); //add new world object
-//                        System.out.println("Created object at " + px + ", " + py);
-//                    }
-//                    else{
-//                        
-//                    }
-//                                         
-//                }
+
+                do { //continue drawing ray past red pixel    
+                    wallDistance += 0.1; //extend ray
+                     px = (int) (cameraPositionX + wallDistance * sin);//draw ray in direction of angle along the x axis
+                     py = (int) (cameraPositionY + wallDistance * cos);//draw ray in direction of angle along the y axis
+                    currentColour = map.getRGB(px, py);
+                } while (currentColour != black);//until a black wall is hit, -16777216 is the integer value of black
+
+            }
+            else if(currentColour == pink){ //if ray hits red
                 
+
                 do { //continue drawing ray past red pixel    
                     wallDistance += 0.1; //extend ray
                      px = (int) (cameraPositionX + wallDistance * sin);//draw ray in direction of angle along the x axis
@@ -371,13 +313,24 @@ public class Window extends javax.swing.JFrame {
             return black;
         }
         
-        else if(currentColour == red){ //if ray hits red
-
-            
+        else if(currentColour == red || currentColour == pink){ //if ray hits red
+        if(objectDistance <= 6 && currentColour == red){ 
+            //dont do loop if too close to world object, otherwise many rays will pass through the same pixel and affect perfomance
+        }
+        if(objectDistance <= 6 && currentColour == pink){
+            //dont do loop if too close to world object, otherwise many rays will pass through the same pixel and affect perfomance
+             //moveCamera(-1d/10, 0); //push back player to continue drawing tree infront of camera
+        }
+        else{
             if(worldObjects.isEmpty()){ // if no world objects
-                    worldObjects.add(new WorldObject(px,py,plant,red,objectDistance,false)); //add first world object
-                    System.out.println("Created object at " + px + "," + py + " " + "in " + "worldObjects(" + (worldObjects.size()-1) + ")");
-                    objectIndex = 0;
+                if(currentColour == red) {
+                    worldObjects.add(new WorldObject(px,py,plant,map.getRGB(px, py),objectDistance)); //add first world object (plant)
+                }
+                else if (currentColour == pink){
+                    worldObjects.add(new WorldObject(px,py,tree,map.getRGB(px, py),objectDistance)); //add first world object (tree)
+                }
+                    //System.out.println("Created object at " + px + "," + py + " " + "in " + "worldObjects(" + (worldObjects.size()-1) + ")");
+                    objectIndex = 0; //objectIndex must point to last added world object
                     return red; //ray captures object
                 }
                 
@@ -385,11 +338,11 @@ public class Window extends javax.swing.JFrame {
                     boolean foundMatch = false;
                     for(int i = 0; i < worldObjects.size(); i++){        
 
-                        if(worldObjects.get(i).getXCoordinate() == px && worldObjects.get(i).getYCoordinate() == py){ //if coordinates of red pixel match
+                        if((worldObjects.get(i).getXCoordinate() == px && worldObjects.get(i).getYCoordinate() == py) || (worldObjects.get(i).getXCoordinate() == px+1 && worldObjects.get(i).getYCoordinate() == py) || (worldObjects.get(i).getXCoordinate() == px-1 && worldObjects.get(i).getYCoordinate() == py) || (worldObjects.get(i).getXCoordinate() == px && worldObjects.get(i).getYCoordinate() == py-1) || (worldObjects.get(i).getXCoordinate() == px && worldObjects.get(i).getYCoordinate() == py+1) || (worldObjects.get(i).getXCoordinate() == px+1 && worldObjects.get(i).getYCoordinate() == py+1) || (worldObjects.get(i).getXCoordinate() == px+1 && worldObjects.get(i).getYCoordinate() == py-1) || (worldObjects.get(i).getXCoordinate() == px-1 && worldObjects.get(i).getYCoordinate() == py+1) || (worldObjects.get(i).getXCoordinate() == px-1 && worldObjects.get(i).getYCoordinate() == py-1)){ //if coordinates of pixel match within a 2x2 margin
    
                                 foundMatch = true; //found matching pixel coordinates
-                                System.out.println("Skipped object. " + "Matched coordinates of " + "worldObjects(" + i + ")"); //do not add 
-                                System.out.println("worldObjects size is " + worldObjects.size());
+                                //System.out.println("Skipped object. " + "Matched coordinates of " + "worldObjects(" + i + ")"); //do not add 
+                                //System.out.println("worldObjects size is " + worldObjects.size());
                             
                         }
                         else{
@@ -398,13 +351,15 @@ public class Window extends javax.swing.JFrame {
                     }
                     
                     if(foundMatch == false){ // if coordinates of red pixel do not match
-                        worldObjects.add(new WorldObject(px,py,plant,red,objectDistance,false)); //add new world object
-                        System.out.println("Created object at " + px + ", " + py);
-//                        drawObjects = true;
-//                        worldObjects.clear();
-//                        worldObjects.trimToSize();
+                        if(currentColour == red) {
+                            worldObjects.add(new WorldObject(px,py,plant,map.getRGB(px, py),objectDistance)); //add first world object
+                        }
+                        else if (currentColour == pink){
+                            worldObjects.add(new WorldObject(px,py,tree,map.getRGB(px, py),objectDistance)); //add first world object
+                        }                        //System.out.println("Created object at " + px + ", " + py);
+ 
                         foundMatch = true;
-                        objectIndex = worldObjects.size()-1;
+                        objectIndex = worldObjects.size()-1; //objectIndex must point to last added world object
                         return red; //ray captures object
                     }
                     else{
@@ -417,103 +372,92 @@ public class Window extends javax.swing.JFrame {
             else{
                 
             }
-                //return red;
+
         }
         
         return black;
     }
+        return black;
+    }
     
-    public void draw2D(Graphics2D g) {
+    private void draw2D(Graphics2D g) {
         g.setBackground(Color.PINK);
         g.clearRect(0, 0, getWidth(), getHeight());
         g.translate(0, 31);
         g.drawImage(map, 0, 0, null); //draw map
+        g.setColor(Color.BLACK);
+        g.drawString("Controls:", 130, 400);
+        g.drawString("WASD or Arrow keys to move", 60, 430);
+        g.drawString("Q&E, Z&X or drag the mouse to turn", 60, 460);
+        g.drawString("By Thomas Botsford 2020", 10, 675);
         g.setColor(Color.RED);
         g.fillRect((int) (cameraCoordinates.x - 3), (int) (cameraCoordinates.y - 3), 6, 6); //draw camera on 2d map
-//        g.setColor(Color.WHITE);
-//        g.fillRect(315, 0, 955, 720);
+
         g.drawImage(sky, 315, 0, null); 
         g.drawImage(floor, 315, 360, null); 
         
         // draw walls
-        for (int x=-(projectionPlaneWidth); x<(projectionPlaneWidth); x+=sliceWidth) { //for pixel along the projection plane's width  in the FOV
-           // if (x % 2 == 0){
-                double a = Math.atan(x / projectionPlaneDistance);
-                //cast a single ray for a single angle, repeated for each degree in the FOV
+        for (int x=-(projectionPlaneWidth); x<(projectionPlaneWidth); x+=sliceWidth) { //for each pixel along the projection plane's width  in the FOV
+                double a = Math.atan(x / projectionPlaneDistance); //angle of ray
+                //cast a single ray for that angle 
                 double cameraWallDistance = castRay(cameraCoordinates.x, cameraCoordinates.y, cameraAngle - a, g, Color.BLUE); 
-                double z = cameraWallDistance * Math.cos(a);
-                int colour = getColour(cameraCoordinates.x, cameraCoordinates.y, cameraAngle - a);
+                double z = cameraWallDistance * Math.cos(a); //correct wall distance to prevent "fish eye" effect
+                int colour = getColour(cameraCoordinates.x, cameraCoordinates.y, cameraAngle - a); //colour intersecting with ray
  
                     if(sliceIndex < sliceTextures.length -1){ //if sliceIndex is under its maximum
                         sliceIndex++;
                         drawWall3D(g, z, x + 790, colour);
                     }
                     else{
-                        sliceIndex = 0;
+                        sliceIndex = 0; //loop array
                         drawWall3D(g, z, x + 790, colour);
-                    }
-                
-                
-           // }
-            //else{
-                
-           // }
-
+                    }                           
         }
         // draw camera direction
+        
         //cast ray in straight line in front of camera, will always be in middle of FOV
-        castRay(cameraCoordinates.x, cameraCoordinates.y, cameraAngle, g, Color.GREEN); 
-        //Framerate.update();
+        castRay(cameraCoordinates.x, cameraCoordinates.y, cameraAngle, g, Color.CYAN); 
         showFramerate(g);
     }
     
-    private void drawObject(int x, double distance, double z, int size, Graphics g){
-        //int y = (projectionPlaneHeight / 2) + (size / 2);
-        int y = map.getHeight() + ((int)(projectionPlaneDistance*20/z)/2);
-        y = y - (int)(((plant.getHeight())*(projectionPlaneDistance/(z*2)))/2);
-        y = y < (projectionPlaneHeight / 2) - (int)(((plant.getHeight())*(projectionPlaneDistance/(z*2)))/2) ? (projectionPlaneHeight / 2) - (int)(((plant.getHeight())*(projectionPlaneDistance/(z*2)))/2) : y;
-        x = x-(int)((((plant.getWidth())*(projectionPlaneDistance/(z*2)))));
-        //int y = (int) (projectionPlaneDistance * 11 / z)*2; 
-        //g.drawImage(scale(plant, projectionPlaneHeight / 2 - wallHeight, projectionPlaneHeight / 2 - wallHeight) , x, y + 300 , null); //draw plant
-        g.drawImage(scale(plant,(int)((plant.getWidth())*(projectionPlaneDistance/(z*2))),(int)((plant.getHeight())*(projectionPlaneDistance/(z*2)))),x, y , null); //draw plant
+    private void drawObject(int x, double z, Graphics g){
+        int y = map.getHeight() + ((int)(projectionPlaneDistance*20/z)/2); // draw sprite at height according to distance (z)
+        BufferedImage sprite = worldObjects.get(objectIndex).getSprite(); // sprite is taken from object captured by the ray
+        y = y - (int)(((sprite.getHeight())*(projectionPlaneDistance/(z*2)))/2); //reduce y coordinate of sprite by the height of the sprite
+        y = y < ((projectionPlaneHeight / 2) - (int)(((sprite.getHeight())*(projectionPlaneDistance/(z*2)))/2)) + (projectionPlaneHeight/100) ? ((projectionPlaneHeight / 2) - (int)(((sprite.getHeight())*(projectionPlaneDistance/(z*2)))/2)) + (projectionPlaneHeight/100) : y; // maximum y coordinate for sprite
+        x = x-(int)((((sprite.getWidth())*(projectionPlaneDistance/(z*2)))));
+        x = x < 270 + sprite.getWidth() ? -1500 + sprite.getWidth() : x;
+        g.drawImage(scaleImage(worldObjects.get(objectIndex).getSprite(),(int)((sprite.getWidth())*(projectionPlaneDistance/(z*2))),(int)((sprite.getHeight())*(projectionPlaneDistance/(z*2)))),x, y , null); //draw scaled plant or tree
 
     }
     
     private void drawWall3D(Graphics g, double z, int x, int c) {
          if (c == red){
-            double p = z / 300;
-            p = p > 1 ? 1 : p;
-            p = p < 0 ? 0 : p;
-            int shade = (int) (p * 255);
-            int wallHeight = (int) (projectionPlaneDistance * 20 / z);
-            wallHeight = wallHeight > projectionPlaneHeight * 3 ? projectionPlaneHeight * 3 : wallHeight;
-            g.setColor(new Color(shade, shade, shade));
-            //g.drawLine(x, projectionPlaneHeight / 2 - (wallHeight/2), x, projectionPlaneHeight / 2 + (wallHeight/2));  
-            g.drawImage(scale(sliceTextures[sliceIndex], sliceWidth, wallHeight), x, projectionPlaneHeight / 2 - (wallHeight/2), null);
-            drawObject(x, 0, worldObjects.get(objectIndex).getDistance(), wallHeight, g);
-
-        }
-         else if (c == black){
-//            double p = z / 300;
+//            double p = z / 300; //shade untextured wall slice
 //            p = p > 1 ? 1 : p;
 //            p = p < 0 ? 0 : p;
 //            int shade = (int) (p * 255);
-            int wallHeight = (int) (projectionPlaneDistance * 20 / z);
-            wallHeight = wallHeight > projectionPlaneHeight * 3 ? projectionPlaneHeight * 3 : wallHeight;
+            int wallHeight = (int) (projectionPlaneDistance * 17 / z); //height of wall slice
+            wallHeight = (int) (wallHeight > projectionPlaneHeight * 4.2 ? projectionPlaneHeight * 4.2 : wallHeight); //maximum height of wall slice
             //g.setColor(new Color(shade, shade, shade));
-            //g.drawLine(x, projectionPlaneHeight / 2 - wallHeight, x, projectionPlaneHeight / 2 + wallHeight);//draw line from (x,y to x,y)(CANNOT BE USED WITH BELOW FILL RECTANGLE OR DRAW IMAGE'S)
-            //g.fillRect(x, projectionPlaneHeight / 2 - wallHeight, sliceWidth, wallHeight * 2); //draw rectangle (CANNOT BE USED WITH ABOVE DRAW LINE OR BELOW DRAW IMAGE'S)              
-            //g.drawImage(scale(sliceTextures[sliceIndex], sliceWidth, wallHeight * 2), x, projectionPlaneHeight / 2 - wallHeight, null);           
-            g.drawImage(scale(sliceTextures[sliceIndex], sliceWidth, wallHeight), x, projectionPlaneHeight / 2 - (wallHeight/2), null);
-//            if(c == red){ // find correct world object in arrayList using coordinates, and draw it with correct distance 
-//                
-//
-//                                         
-//                
-//                
-//            }
-            //g.drawImage(scale(recolour(sliceTextures[sliceIndex],z), sliceWidth, wallHeight), x, projectionPlaneHeight / 2 - (wallHeight/2), null);
-         
+            //g.drawLine(x, projectionPlaneHeight / 2 - wallHeight, x, projectionPlaneHeight / 2 + wallHeight);//draw line from (x,y to x,y) for wall slice(CANNOT BE USED WITH BELOW FILL RECTANGLE OR DRAW IMAGE'S)
+            //g.fillRect(x, projectionPlaneHeight / 2 - wallHeight, sliceWidth, wallHeight * 2); //draw rectangle for wall slice (CANNOT BE USED WITH ABOVE DRAW LINE OR BELOW DRAW IMAGE'S)              
+            //g.drawImage(scale(sliceTextures[sliceIndex], sliceWidth, wallHeight * 2), x, projectionPlaneHeight / 2 - wallHeight, null); //alternate draw textured wall slice         
+            g.drawImage(scaleImage(sliceTextures[sliceIndex], sliceWidth, wallHeight), x, projectionPlaneHeight / 2 - (wallHeight/2), null); //draw scaled wall slice
+            drawObject(x, worldObjects.get(objectIndex).getDistance(), g); //draw object captured by the same ray
+        }
+         else if (c == black){
+//            double p = z / 300; //shade untextured wall slice
+//            p = p > 1 ? 1 : p;
+//            p = p < 0 ? 0 : p;
+//            int shade = (int) (p * 255);
+            int wallHeight = (int) (projectionPlaneDistance * 17 / z);
+            wallHeight = (int) (wallHeight > projectionPlaneHeight * 4.2 ? projectionPlaneHeight * 4.2 : wallHeight);
+            //g.setColor(new Color(shade, shade, shade));
+            //g.drawLine(x, projectionPlaneHeight / 2 - wallHeight, x, projectionPlaneHeight / 2 + wallHeight);//draw line from (x,y to x,y) for wall slice(CANNOT BE USED WITH BELOW FILL RECTANGLE OR DRAW IMAGE'S)
+            //g.fillRect(x, projectionPlaneHeight / 2 - wallHeight, sliceWidth, wallHeight * 2); //draw rectangle for wall slice (CANNOT BE USED WITH ABOVE DRAW LINE OR BELOW DRAW IMAGE'S)              
+            //g.drawImage(scale(sliceTextures[sliceIndex], sliceWidth, wallHeight * 2), x, projectionPlaneHeight / 2 - wallHeight, null); //alternate draw textured wall slice         
+            g.drawImage(scaleImage(sliceTextures[sliceIndex], sliceWidth, wallHeight), x, projectionPlaneHeight / 2 - (wallHeight/2), null);      
          }
         
         
@@ -528,43 +472,22 @@ public class Window extends javax.swing.JFrame {
     //display drawn graphics drawn in backbuffer
     @Override
     public void paint(Graphics d) {
-        draw2D((Graphics2D) backBuffer.getGraphics());
-        d.drawImage(backBuffer, 0, 0, null);
-        enableDrawObjects();
-        Framerate.update();
+        draw2D((Graphics2D) backBuffer.getGraphics()); //call draw2D method and apply it to the backBuffer
+        d.drawImage(backBuffer, 0, 0, null); //draw the contents of the backBuffer
+        enableDrawObjects(); //reset world objects arrayList
+        Framerate.update(); //update framerate
     }
     
-    public BufferedImage scale(BufferedImage imageToScale, int dWidth, int dHeight) {
+    public BufferedImage scaleImage(BufferedImage imageToScale, int width, int height) { //scale image to new width and height
         BufferedImage scaledImage = null;
         if (imageToScale != null) {
-            scaledImage = new BufferedImage(dWidth, dHeight, imageToScale.getType());
-            Graphics2D graphics2D = scaledImage.createGraphics();
-            graphics2D.drawImage(imageToScale, 0, 0, dWidth, dHeight, null);
-            graphics2D.dispose();
+            scaledImage = new BufferedImage(width, height, imageToScale.getType()); //create bufferedImage with new size
+            Graphics2D imgG = scaledImage.createGraphics(); //create graphics for new image
+            imgG.drawImage(imageToScale, 0, 0, width, height, null); //draw new image
+            imgG.dispose();
         }
         return scaledImage;
-    }
-    
-    public BufferedImage recolour(BufferedImage imageToColour, double z){
-        int w = imageToColour.getWidth(); 
-        int h = imageToColour.getHeight(); 
-        double p = z / 300;
-            p = p > 1 ? 1 : p;
-            p = p < 0 ? 0 : p;
-            int shade = (int) (p * 255); 
-        for (int y = 0; y < h; y++) 
-            { 
-                for (int x = 0; x < w; x++) 
-                { 
-                    
-
-                    
-                  
-                } 
-            }  
-        
-        return imageToColour;
-    }
+    }   
     
     //method called in case of key event, updates coordinates and rotation angle
     private void moveCamera(double distance, double angle) {
@@ -581,7 +504,7 @@ public class Window extends javax.swing.JFrame {
         int px = (int) (cameraCoordinates.x + 0.1 * sin);
         int py = (int) (cameraCoordinates.y + 0.1 * cos);
         int currentColour = map.getRGB(px, py); 
-        if(currentColour != white){ //if player coodinates are over black wall...
+        if(currentColour == blue){ //if player coodinates are over area with collision
             switch(direction){
                 case 0://if moving forward
                     moveCamera(-1d/10, 0); //move backwards an equal amount
@@ -597,102 +520,78 @@ public class Window extends javax.swing.JFrame {
                 break;
             }    
         }
+        else if(currentColour == black){ //if player coodinates are over black wall
+            //reset coordinates to prevent out of bounds crash
+            cameraCoordinates.x = 50;
+            cameraCoordinates.y = 240;            
+        }
     }
 
-    public void updateMovement() {
+    public void updateMovement() { //move camera if keys are pressed down
         
-        if (Keyboard.keyDown[37] || Keyboard.keyDown[65]) { // left
+        if (Keyboard.keyDown[37] || Keyboard.keyDown[65]) { // left or a
             moveCamera(1d/30000, Math.toRadians(90));
             wallCollision(2);
         }
-        else if (Keyboard.keyDown[39] || Keyboard.keyDown[68]) { // right
+        else if (Keyboard.keyDown[39] || Keyboard.keyDown[68]) { // right or d
             moveCamera(1d/30000, Math.toRadians(-90));
             wallCollision(3);
         }
 
-        if (Keyboard.keyDown[38] || Keyboard.keyDown[87]) { // up 
+        if (Keyboard.keyDown[38] || Keyboard.keyDown[87]) { // up or w
             moveCamera(1d/30000, 0);
             wallCollision(0);
         }
-        else if (Keyboard.keyDown[40] || Keyboard.keyDown[83]) { // down
+        else if (Keyboard.keyDown[40] || Keyboard.keyDown[83]) { // down or s
             moveCamera(-1d/30000, 0);
             wallCollision(1);
         }        
         
-        if (Keyboard.keyDown[90]  || Keyboard.keyDown[81]) { // z
+        if (Keyboard.keyDown[90]  || Keyboard.keyDown[81]) { // z or q
             cameraAngle += 0.0000017;
-//            if (sliceIndex > 0){    
-//                sliceIndex--;
-//            }
-//            else{
-//                
-//            }
+
         }
-        else if (Keyboard.keyDown[88] || Keyboard.keyDown[69]) { // x
+        else if (Keyboard.keyDown[88] || Keyboard.keyDown[69]) { // x or e
             cameraAngle -= 0.0000017;
-//            if (sliceIndex > 0){    
-//                sliceIndex--;
-//            }
-//            else{
-//                
-//            }
+
         }
-        repaint();
+        repaint(); //repaint graphics with updated distance and angle, will also update framerate counter
     }
     
-    private static class KeyHandler extends KeyAdapter {
-
+    private static class KeyHandler extends KeyAdapter {  //event handler for key events
         @Override
-        public void keyPressed(KeyEvent e) {
-            Keyboard.setKeyDown(e.getKeyCode(), true);
+        public void keyPressed(KeyEvent e) { //when a key is pressed
+            Keyboard.setKeyDown(e.getKeyCode(), true); //that key's keycode is considered "down" in keyboard class
         }
-
         @Override
         public void keyReleased(KeyEvent e) {
-            Keyboard.setKeyDown(e.getKeyCode(), false);
-        }
-        
+            Keyboard.setKeyDown(e.getKeyCode(), false); //that key's keycode is not considered "down" in keyboard class
+        }       
     }
     
     private int mouseClickX;
     private double angleOriginal;
-    private class MouseHandler extends MouseAdapter {
-
+    private class MouseHandler extends MouseAdapter { //event handler for mouse clicks
         @Override
         public void mousePressed(MouseEvent m) {
             //System.out.println("Clicked " + m.getX());
             mouseClickX = m.getX();
             angleOriginal = cameraAngle;
         }
-
+    }   
+    private class MouseMovementHandler extends MouseMotionAdapter { //event handler for moving mouse      
         @Override
-        public void mouseReleased(MouseEvent m) { 
-            
-            //System.out.println("Released " + m.getX());
-
-        }
-        
-    }
-    
-    private class MouseMovementHandler extends MouseMotionAdapter {
-        
-        @Override
-        public void mouseDragged(MouseEvent m) {
+        public void mouseDragged(MouseEvent m) { //move mouse while clicked
             int difX = m.getX() - mouseClickX;
-            //System.out.println("Dragged " + m.getX());
             double difAngle = Math.toRadians(difX / 12d);
             cameraAngle = angleOriginal - difAngle;
-        }
-        
+        }        
     }
     
     //display FPS in top left
     private static void showFramerate(Graphics2D f) {
-        f.setColor(Color.BLACK); 
-        f.fillRect(0, 0, 100, 30); //draw black rectangle for FPS counter in top left
         f.setColor(Color.WHITE); 
-        f.drawString("FPS: " + Framerate.fps, 20, 20); //draw white text inside box    
-
+        f.drawString("FPS: " + Framerate.fps, 20, 20); //draw white text in top left    
     }   
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
